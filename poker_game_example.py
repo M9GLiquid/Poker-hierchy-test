@@ -2,6 +2,28 @@ import poker_environment as pe_
 from poker_environment import AGENT_ACTIONS, BETTING_ACTIONS
 import copy
 
+class GameNode:
+    def __init__(self, state, parent=None, action=None, g_cost=0, h_cost=0):
+        self.state = state            # Reference to the GameState object
+        self.parent = parent          # Reference to the parent node
+        self.children = []            # List of child nodes
+        self.action = action          # Action leading to this state
+        self.g_cost = g_cost          # Cost to reach this node (used in A*)
+        self.h_cost = h_cost          # Heuristic estimate to the goal (used in A*)
+        self.f_cost = g_cost + h_cost # Total cost (used for A*)
+        self.depth = parent.depth + 1 if parent else 0  # Depth in the treeclear
+
+    def add_child(self, child):
+        self.children.append(child)
+
+    def reconstruct_path(self):
+        path = []
+        current = self
+        while current:
+            path.append(current)
+            current = current.parent
+        return path[::-1]  # Reverse to get root-to-leaf order
+
 """
 Player class
 """
@@ -282,8 +304,83 @@ def get_next_states(last_state):
             exit()
         return states
 
+"""
+    Builds a game tree starting from the initial state up to max_depth.
 
+    Args:
+        initial_state (GameState): The root game state.
+        max_depth (int): The maximum depth of the tree.
 
+    Returns:
+        GameNode: The root of the constructed tree.
+"""
+def create_tree(initial_state):
+    # Create the root node
+    root = GameNode(state=initial_state)
+    node_count = 1
+
+    # Use a stack for tree construction (LIFO for DFS-style expansion)
+    stack = [root]  # Start with the root node
+
+    while stack:
+        current_node = stack.pop()  # Process the top node from the stack
+
+        # Stop expanding if max depth is reached
+        if is_game_over(current_node.state):
+            continue
+
+        # Generate child states
+        child_states = get_next_states(current_node.state)
+
+        for child_state in child_states:
+            # Create a child node
+            child_node = GameNode(
+                state=child_state,
+                parent=current_node,
+                action=child_state.agent.action
+            )
+
+            # Add the child node to the current node's children
+            current_node.add_child(child_node)
+            node_count += 1
+
+            # Add the child node to the stack for further processing
+            stack.append(child_node)
+
+    return root, node_count
+
+"""
+    Recursively prints the tree structure in a simplified format.
+
+    Args:
+        node (GameNode): The node to print.
+        indent (str): Indentation for the current node.
+        is_last (bool): Whether this node is the last child of its parent.
+"""
+def print_tree(node, indent="", is_last=True):
+    connector = "└──" if is_last else "├──"
+    acting_agent = node.state.acting_agent or "None"
+
+    print(f"{indent}{connector} Action={node.action or 'None'}"
+          f" Acting={acting_agent}, Hand={node.state.nn_current_hand}")
+
+    # Update indentation for the children
+    indent += "    " if is_last else "│   "
+
+    # Print children recursively
+    for i, child in enumerate(node.children):
+        is_last_child = (i == len(node.children) - 1)
+        print_tree(child, indent, is_last_child)
+
+"""
+    Checks if the game is over based on the current state.
+"""
+def is_game_over(state):
+    agent_won = (state.agent.stack - INIT_AGENT_STACK) > 100
+    opponent_out_of_money = state.opponent.stack <= 0
+    agent_out_of_money = state.agent.stack <= 0
+    max_hands_reached = state.nn_current_hand >= MAX_HANDS
+    return agent_won or opponent_out_of_money or agent_out_of_money or max_hands_reached
 
 """
 Game flow:
@@ -294,20 +391,29 @@ MAX_HANDS = 4
 INIT_AGENT_STACK = 400
 
 # initialize 2 agents and a game_state
-agent = PokerPlayer(current_hand_=None, stack_=INIT_AGENT_STACK, action_=None, action_value_=None)
-opponent = PokerPlayer(current_hand_=None, stack_=INIT_AGENT_STACK, action_=None, action_value_=None)
+for i in range(1, 5):
+    MAX_HANDS = i
+    agent = PokerPlayer(current_hand_=None, stack_=INIT_AGENT_STACK, action_=None, action_value_=None)
+    opponent = PokerPlayer(current_hand_=None, stack_=INIT_AGENT_STACK, action_=None, action_value_=None)
 
 
-init_state = GameState(nn_current_hand_=0,
-                       nn_current_bidding_=0,
-                       phase_ = 'INIT_DEALING',
-                       pot_=0,
-                       acting_agent_=None,
-                       agent_=agent,
-                       opponent_=opponent,
-                       )
+    init_state = GameState(nn_current_hand_=0,
+                        nn_current_bidding_=0,
+                        phase_ = 'INIT_DEALING',
+                        pot_=0,
+                        acting_agent_=None,
+                        agent_=agent,
+                        opponent_=opponent,
+                        )
 
+    # Build the tree up to depth 3
+    tree_root, node_count = create_tree(init_state)
 
+    # Print the tree
+    #print_tree(tree_root)
+    print(f"Total nodes: {node_count}, Max Hands: {MAX_HANDS}")
+
+quit()
 game_state_queue = []
 game_on = True
 round_init = True
@@ -325,17 +431,13 @@ while game_on:
         game_state_queue.extend(states_[:])
 
         for _state_ in states_:
-            if _state_.phase == 'SHOWDOWN' and (_state_.opponent.stack <= 300 or _state_.agent.stack <= 300): #or _state_.MAX_HANDS >= 4):
-                    end_state_ = _state_
-                    game_on = False
-
-
+            if is_game_over(_state_):
+                end_state_ = _state_
+                game_on = False
 
 """
 Printing game flow & info
 """
-
-
 state__ = end_state_
 nn_level = 0
 
@@ -344,7 +446,7 @@ print('nn_states_total', len(game_state_queue))
 
 while state__.parent_state != None:
     nn_level += 1
-    print(nn_level)
+    print("Level:", nn_level)
     state__.print_state_info()
     state__ = state__.parent_state
 
@@ -354,6 +456,3 @@ print(nn_level)
 """
 Perform searches
 """
-
-
-

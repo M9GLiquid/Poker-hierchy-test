@@ -55,7 +55,7 @@ def poker_strategy_example(opponent_hand,
     max_phase = 6
 
     def compute_hand_strength(type_rank, hand_rank):
-        return type_rank*13+hand_rank
+        return type_rank * 13 + hand_rank
 
     def get_strength_interval(type_rank, hand_rank):
         #strength = type_rank*13+hand_rank
