@@ -40,7 +40,7 @@ PHASE = {'INIT_DEALING', 'BIDDING', 'SHOWDOWN'}
 AGENT_ACTIONS = {'CALL', 'BET5', 'BET10', 'BET25', 'FOLD'}
 BETTING_ACTIONS = {'BET5', 'BET10', 'BET25'}
 
-MAX_HANDS = 4
+MAX_HANDS = 5
 INIT_AGENT_STACK = 100
 
 def poker_strategy_example(opponent_hand,
@@ -164,8 +164,6 @@ fixed_hands = [(['Tc', '9d', 'Qd', '8h', 'Kh'], ['2s', '8s', '4c', '3s', '4h']),
                (['2s', '4s', 'Kd', '5s', 'Qh'], ['Js', 'Kh', '6h', 'As', '7d']),
                (['4d', '8h', '2c', 'Tc', '7d'], ['Jc', '8s', '2d', '6d', '4c']),
                (['Kc', 'Qc', 'Qh', '4s', '4d'], ['5c', 'Ad', '2c', '5h', 'Tc'])]
-
-
 
 """
 The Score of the Hand is a list with 3 elements:

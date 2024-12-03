@@ -90,45 +90,6 @@ class GameState(object):
             self.showdown_info = 'opponent win'
             self.opponent.stack += self.pot
 
-    # print out necessary information of this game state
-    def print_state_info(self):
-
-        print('************* state info **************')
-        print('nn_current_hand', self.nn_current_hand)
-        print('nn_current_bidding', self.nn_current_bidding)
-        print('phase', self.phase)
-        print('pot', self.pot)
-        print('acting_agent', self.acting_agent)
-        print('parent_state', self.parent_state)
-        print('children', self.children)
-        print('agent', self.agent)
-        print('opponent', self.opponent)
-
-        if self.phase == 'SHOWDOWN':
-            print('---------- showdown ----------')
-            print('agent.current_hand', self.agent.current_hand)
-            print(self.agent.current_hand_type, self.agent.current_hand_strength)
-            print('opponent.current_hand', self.opponent.current_hand)
-            print(self.opponent.current_hand_type, self.opponent.current_hand_strength)
-            print('showdown_info', self.showdown_info)
-
-        print('----- agent -----')
-        print('agent.current_hand',self.agent.current_hand)
-        print('agent.current_hand_type',self.agent.current_hand_type)
-        print('agent.current_hand_strength',self.agent.current_hand_strength)
-        print('agent.stack',self.agent.stack)
-        print('agent.action',self.agent.action)
-        print('agent.action_value',self.agent.action_value)
-
-        print('----- opponent -----')
-        print('opponent.current_hand', self.opponent.current_hand)
-        print('opponent.current_hand_type',self.opponent.current_hand_type)
-        print('opponent.current_hand_strength',self.opponent.current_hand_strength)
-        print('opponent.stack',self.opponent.stack)
-        print('opponent.action',self.opponent.action)
-        print('opponent.action_value',self.opponent.action_value)
-        print('**************** end ******************')
-
 # copy given state in the argument
 def copy_state(game_state):
     _state = copy.copy(game_state)
@@ -138,7 +99,6 @@ def copy_state(game_state):
 
 # Get the next possible states from the current state
 def get_next_states(last_state):
-
     # agent acts first if it is a new betting round
     if last_state.phase == 'SHOWDOWN' or \
             last_state.acting_agent == 'opponent' or \
