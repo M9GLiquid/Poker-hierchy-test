@@ -1,5 +1,7 @@
 import poker_environment as pe_
 from poker_environment import AGENT_ACTIONS, BETTING_ACTIONS
+from collections import deque
+import heapq
 import copy
 
 class GameNode:
@@ -11,11 +13,12 @@ class GameNode:
         self.g_cost = g_cost          # Cost to reach this node (used in A*)
         self.h_cost = h_cost          # Heuristic estimate to the goal (used in A*)
         self.f_cost = g_cost + h_cost # Total cost (used for A*)
-        self.depth = parent.depth + 1 if parent else 0  # Depth in the treeclear
 
+    # Add a child node to the current node
     def add_child(self, child):
         self.children.append(child)
 
+    # Reconstruct the path from the root to the current node
     def reconstruct_path(self):
         path = []
         current = self
@@ -24,9 +27,12 @@ class GameNode:
             current = current.parent
         return path[::-1]  # Reverse to get root-to-leaf order
 
-"""
-Player class
-"""
+    # Compare nodes by their f_cost
+    def __lt__(self, other):
+        """Compare nodes by their f_cost."""
+        return self.f_cost < other.f_cost
+
+# Poker Player class
 class PokerPlayer(object):
     def __init__(self, current_hand_=None, stack_=300, action_=None, action_value_=None):
         self.current_hand = current_hand_
@@ -36,16 +42,12 @@ class PokerPlayer(object):
         self.action = action_
         self.action_value = action_value_
 
-    """
-    identify agent hand and evaluate it's strength
-    """
+    # Evaluate the current hand
     def evaluate_hand(self):
         self.current_hand_type = pe_.identify_hand(self.current_hand)
         self.current_hand_strength = pe_.Types[self.current_hand_type[0]]*len(pe_.Ranks) + pe_.Ranks[self.current_hand_type[1]]
 
-    """
-    return possible actions, fold if there is not enough money...
-    """
+    # Get the available actions for the player
     def get_actions(self):
         actions_ = []
         for _action_ in AGENT_ACTIONS:
@@ -55,9 +57,7 @@ class PokerPlayer(object):
                 actions_.append(_action_)
         return set(actions_)
 
-"""
-Game State class
-"""
+# Game State class
 class GameState(object):
     def __init__(self,
                  nn_current_hand_=None,
@@ -81,11 +81,8 @@ class GameState(object):
         self.opponent = opponent_
         self.showdown_info = None
 
-    """
-    draw 10 cards randomly from a deck
-    """
+    # Deal cards to the players
     def dealing_cards(self):
-
         if self.nn_current_hand >= 20:
             print("random hand  ", self.nn_current_hand)
             # randomly generated hands
@@ -99,20 +96,15 @@ class GameState(object):
         self.opponent.current_hand = opponent_hand
         self.opponent.evaluate_hand()
 
-    """
-    draw 10 cards from a fixed sequence of hands
-    """
+    # Deal fixed cards to the players
     def dealing_cards_fixed(self):
         self.agent.current_hand = pe_.fixed_hands[self.nn_current_hand][0]
         self.agent.evaluate_hand()
         self.opponent.current_hand = pe_.fixed_hands[self.nn_current_hand][1]
         self.opponent.evaluate_hand()
 
-    """
-    SHOWDOWN phase, assign pot to players
-    """
+    # Determine the winner of the showdown
     def showdown(self):
-
         if self.agent.current_hand_strength == self.opponent.current_hand_strength:
             self.showdown_info = 'draw'
             if self.acting_agent == 'agent':
@@ -174,28 +166,30 @@ def copy_state(game_state):
     _state.opponent = copy.copy(game_state.opponent)
     return _state
 
-"""
-successor function for generating next state(s)
-"""
+# Get the next possible states from the current state
 def get_next_states(last_state):
 
-    if last_state.phase == 'SHOWDOWN' or last_state.acting_agent == 'opponent' or last_state.phase == 'INIT_DEALING':
+    # agent acts first if it is a new betting round
+    if last_state.phase == 'SHOWDOWN' or \
+            last_state.acting_agent == 'opponent' or \
+            last_state.phase == 'INIT_DEALING':
 
         # NEW BETTING ROUND, AGENT ACT FIRST
-
         states = []
 
+        # agent acts
         for _action_ in last_state.agent.get_actions():
 
             _state_ = copy_state(last_state)
             _state_.acting_agent = 'agent'
 
+            # Deal cards
             if last_state.phase == 'SHOWDOWN' or last_state.phase == 'INIT_DEALING':
                 #_state_.dealing_cards()
                 _state_.dealing_cards_fixed()
 
+            # agent calls
             if _action_ == 'CALL':
-
                 _state_.phase = 'SHOWDOWN'
                 _state_.agent.action = _action_
                 _state_.agent.action_value = 5
@@ -209,9 +203,8 @@ def get_next_states(last_state):
                 _state_.pot = 0
                 _state_.parent_state = last_state
                 states.append(_state_)
-
+            # agent folds
             elif _action_ == 'FOLD':
-
                 _state_.phase = 'SHOWDOWN'
                 _state_.agent.action = _action_
                 _state_.opponent.stack += _state_.pot
@@ -222,9 +215,8 @@ def get_next_states(last_state):
                 _state_.parent_state = last_state
                 states.append(_state_)
 
-
+            # agent bets
             elif _action_ in BETTING_ACTIONS:
-
                 _state_.phase = 'BIDDING'
                 _state_.agent.action = _action_
                 _state_.agent.action_value = int(_action_[3:])
@@ -236,18 +228,17 @@ def get_next_states(last_state):
                 states.append(_state_)
 
             else:
-
                 print('...unknown action...')
                 exit()
 
         return states
-
+    # opponent acts
     elif last_state.phase == 'BIDDING' and last_state.acting_agent == 'agent':
-
         states = []
         _state_ = copy_state(last_state)
         _state_.acting_agent = 'opponent'
 
+        # Get the opponent's action based on the current state and strategy
         opponent_action, opponent_action_value = pe_.poker_strategy_example(last_state.opponent.current_hand_type[0],
                                                                             last_state.opponent.current_hand_type[1],
                                                                             last_state.opponent.stack,
@@ -257,8 +248,8 @@ def get_next_states(last_state):
                                                                             last_state.pot,
                                                                             last_state.nn_current_bidding)
 
+        # opponent calls
         if opponent_action =='CALL':
-
             _state_.phase = 'SHOWDOWN'
             _state_.opponent.action = opponent_action
             _state_.opponent.action_value = 5
@@ -272,9 +263,8 @@ def get_next_states(last_state):
             _state_.pot = 0
             _state_.parent_state = last_state
             states.append(_state_)
-
+        # opponent folds
         elif opponent_action == 'FOLD':
-
             _state_.phase = 'SHOWDOWN'
 
             _state_.opponent.action = opponent_action
@@ -285,7 +275,7 @@ def get_next_states(last_state):
             _state_.pot = 0
             _state_.parent_state = last_state
             states.append(_state_)
-
+        # opponent bets
         elif opponent_action + str(opponent_action_value) in BETTING_ACTIONS:
 
             _state_.phase = 'BIDDING'
@@ -304,40 +294,40 @@ def get_next_states(last_state):
             exit()
         return states
 
-"""
-    Builds a game tree starting from the initial state up to max_depth.
-
-    Args:
-        initial_state (GameState): The root game state.
-        max_depth (int): The maximum depth of the tree.
-
-    Returns:
-        GameNode: The root of the constructed tree.
-"""
+# Create the game tree starting from the initial state
 def create_tree(initial_state):
     # Create the root node
     root = GameNode(state=initial_state)
     node_count = 1
 
     # Use a stack for tree construction (LIFO for DFS-style expansion)
-    stack = [root]  # Start with the root node
+    stack = deque([root])
 
     while stack:
-        current_node = stack.pop()  # Process the top node from the stack
+        # Pop the last node added to the stack
+        current_node = stack.pop()
 
-        # Stop expanding if max depth is reached
-        if is_game_over(current_node.state):
+        # Don't expand if it's a terminal state
+        if is_terminal_state(current_node.state):
             continue
 
-        # Generate child states
-        child_states = get_next_states(current_node.state)
+        # Generate child states and sort them by action to maintain consistency
+        child_states = sorted(
+            get_next_states(current_node.state),
+            key=lambda state: (
+                state.agent.action if state.acting_agent == 'agent' else state.opponent.action
+            )
+        )
 
         for child_state in child_states:
+            # Determine the action that led to this state
+            action = (child_state.agent.action if child_state.acting_agent == 'agent'
+                      else child_state.opponent.action)
             # Create a child node
             child_node = GameNode(
                 state=child_state,
                 parent=current_node,
-                action=child_state.agent.action
+                action=action
             )
 
             # Add the child node to the current node's children
@@ -349,110 +339,187 @@ def create_tree(initial_state):
 
     return root, node_count
 
-"""
-    Recursively prints the tree structure in a simplified format.
+# A* search algorithm
+def a_star(root):
+    priority_queue = []
+    heapq.heappush(priority_queue, (root.f_cost, root))
+    expanded_nodes = 0
 
-    Args:
-        node (GameNode): The node to print.
-        indent (str): Indentation for the current node.
-        is_last (bool): Whether this node is the last child of its parent.
-"""
+    while priority_queue:
+        # Pop the node with the smallest f_cost
+        _, current_node = heapq.heappop(priority_queue)
+        expanded_nodes += 1
+
+        # Check if the current state satisfies the goal condition
+        if (current_node.state.agent.stack - INIT_AGENT_STACK) >= 100:
+            return current_node.reconstruct_path(), expanded_nodes
+
+        # Generate children and calculate their costs
+        for child in current_node.children:
+            child.g_cost = current_node.g_cost + 1
+            child.h_cost = heuristic(child)
+            child.f_cost = child.g_cost + child.h_cost
+            heapq.heappush(priority_queue, (child.f_cost, child))
+
+    # If no solution is found
+    return None, expanded_nodes
+
+# Heuristic function for A* search
+def heuristic(node):
+    state = node.state
+    agent_stack = state.agent.stack
+    opponent_stack = state.opponent.stack
+    hands_remaining = MAX_HANDS - state.nn_current_hand
+
+    # Heuristic based on the difference in stack sizes and hands remaining to play
+    return (INIT_AGENT_STACK - agent_stack) - (INIT_AGENT_STACK - opponent_stack) + hands_remaining * 0.1
+
+# Depth-first search algorithm
+def dfs(root):
+    stack = deque([root])  # Initialize the DFS stack with the root node
+    expanded_nodes = 0  # Counter for expanded nodes
+
+    while stack:
+        current_node = stack.pop()  # Pop the last node added to the stack
+        expanded_nodes += 1
+
+        # Check if the current state satisfies the goal condition
+        if (current_node.state.agent.stack - INIT_AGENT_STACK) >= 100:
+            return current_node.reconstruct_path(), expanded_nodes
+
+        # Enqueue child nodes for further exploration in reverse order (LIFO)
+        stack.extend(current_node.children)
+
+    # If no solution is found
+    return None, expanded_nodes
+
+
+# Breadth-first search algorithm
+# Returns the path to the goal node and the number of expanded nodes
+def bfs(root):
+    queue = deque([root])  # BFS queue initialized with the root node
+    expanded_nodes = 0  # Counter for expanded nodes
+
+    while queue:
+        current_node = queue.popleft()  # Dequeue the first node
+        expanded_nodes += 1
+
+        # Check if the agent has won more than 100
+        if (current_node.state.agent.stack - INIT_AGENT_STACK) >= 100:
+            return current_node.reconstruct_path(), expanded_nodes
+
+        # Enqueue child nodes for further exploration
+        for child in current_node.children:
+            queue.append(child)
+
+    # If no solution is found
+    return None, expanded_nodes
+
 def print_tree(node, indent="", is_last=True):
     connector = "└──" if is_last else "├──"
     acting_agent = node.state.acting_agent or "None"
 
-    print(f"{indent}{connector} Action={node.action or 'None'}"
-          f" Acting={acting_agent}, Hand={node.state.nn_current_hand}")
+    print(f"{indent}{connector} \
+          Action={node.action or 'None'}"
+          f" Acting={acting_agent}, \
+            Hand={node.state.nn_current_hand}, \
+                Phase={node.state.phase.lower()}, ")
 
     # Update indentation for the children
-    indent += "    " if is_last else "│   "
+    indent += "  " if is_last else "│ "
 
     # Print children recursively
     for i, child in enumerate(node.children):
         is_last_child = (i == len(node.children) - 1)
         print_tree(child, indent, is_last_child)
 
-"""
-    Checks if the game is over based on the current state.
-"""
-def is_game_over(state):
-    agent_won = (state.agent.stack - INIT_AGENT_STACK) > 100
+# Print the path from the root to the goal node
+# The path is a list of nodes from the root to the goal node
+def print_path(path):
+    indent = ""  # Initialize the base indentation
+    nodes = 0
+    for i, node in enumerate(path):
+        nodes += 1
+        parent_action = "NULL" if node.parent is None else node.parent.action or "None"
+        acting_agent = node.state.acting_agent or "None"
+        if acting_agent == 'agent':
+            stack = node.state.agent.stack
+        elif acting_agent == 'opponent':
+            stack = node.state.opponent.stack
+        else:
+            stack = 0
+
+        action = node.action or "None"
+        hand = node.state.nn_current_hand
+        phase = node.state.phase
+
+
+        connector = "└──" if i == len(path) - 1 else "└──"
+        print(f"{indent}{connector}"
+              f"[{phase[0]}][H:{hand}] - {acting_agent}[{action}], ${stack}, Pot={node.state.pot}")
+
+        # Update indentation for the next level
+        indent += "  " if i < len(path) - 1 else ""
+    print(f'Agent Stack: {path[-1].state.agent.stack}')
+    print(f'Opponent Stack: {path[-1].state.opponent.stack}')
+    print(f'Nodes traversed: {nodes}')
+
+# Check if the state is terminal (game over)
+# The game is over if the agent has won more tha 100,
+# the opponent or agent is out of money,
+# or the maximum number of hands has been reached
+def is_terminal_state(state):
+    agent_won = (state.agent.stack - INIT_AGENT_STACK) >= 100
     opponent_out_of_money = state.opponent.stack <= 0
     agent_out_of_money = state.agent.stack <= 0
     max_hands_reached = state.nn_current_hand >= MAX_HANDS
     return agent_won or opponent_out_of_money or agent_out_of_money or max_hands_reached
 
-"""
-Game flow:
-Two agents will keep playing until one of them lose 100 coins or more.
-"""
+################
+#  Game Flow   #
+################
+MAX_HANDS = 0
+INIT_AGENT_STACK = 100
 
-MAX_HANDS = 4
-INIT_AGENT_STACK = 400
-
-# initialize 2 agents and a game_state
+# Play MAX_HANDS hands of poker with 2 agents
 for i in range(1, 5):
     MAX_HANDS = i
     agent = PokerPlayer(current_hand_=None, stack_=INIT_AGENT_STACK, action_=None, action_value_=None)
     opponent = PokerPlayer(current_hand_=None, stack_=INIT_AGENT_STACK, action_=None, action_value_=None)
 
+    init_state = GameState(
+        nn_current_hand_ = 0,
+        nn_current_bidding_ = 0,
+        phase_ = 'INIT_DEALING',
+        pot_ = 0,
+        acting_agent_ = 'Start',
+        agent_ = agent,
+        opponent_ = opponent,
+    )
 
-    init_state = GameState(nn_current_hand_=0,
-                        nn_current_bidding_=0,
-                        phase_ = 'INIT_DEALING',
-                        pot_=0,
-                        acting_agent_=None,
-                        agent_=agent,
-                        opponent_=opponent,
-                        )
-
-    # Build the tree up to depth 3
+    # Create the game tree starting from the initial state
     tree_root, node_count = create_tree(init_state)
 
-    # Print the tree
-    #print_tree(tree_root)
-    print(f"Total nodes: {node_count}, Max Hands: {MAX_HANDS}")
+    # Debug the tree
+    #if MAX_HANDS < 2:
+    #    print_tree(tree_root)
 
-quit()
-game_state_queue = []
-game_on = True
-round_init = True
+    # Perform BFS on the tree
+    path1, expanded_nodes1 = bfs(tree_root)
+    path2, expanded_nodes2 = dfs(tree_root)
+    path3, expanded_nodes3 = a_star(tree_root)
 
-while game_on:
+    # Display results
+    print('------------ print game info ---------------')
+    if path1:
+        print('[BFS path]')
+        print_path(path1)
+    if path2:
+        print('[DFS path]')
+        print_path(path2)
+    if path3:
+        print('[A* path]')
+        print_path(path3)
 
-    if round_init:
-        round_init = False
-        states_ = get_next_states(init_state)
-        game_state_queue.extend(states_[:])
-    else:
-
-        # just an example: only expanding the last return node
-        states_ = get_next_states(states_[-1])
-        game_state_queue.extend(states_[:])
-
-        for _state_ in states_:
-            if is_game_over(_state_):
-                end_state_ = _state_
-                game_on = False
-
-"""
-Printing game flow & info
-"""
-state__ = end_state_
-nn_level = 0
-
-print('------------ print game info ---------------')
-print('nn_states_total', len(game_state_queue))
-
-while state__.parent_state != None:
-    nn_level += 1
-    print("Level:", nn_level)
-    state__.print_state_info()
-    state__ = state__.parent_state
-
-print(nn_level)
-
-
-"""
-Perform searches
-"""
+    print(f"Total nodes: {node_count}, Max Hands: {MAX_HANDS},")
+    print(f'BFS nodes: {expanded_nodes1}, DFS nodes: {expanded_nodes2}, A* nodes: {expanded_nodes3}')

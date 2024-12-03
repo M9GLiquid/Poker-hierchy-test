@@ -129,7 +129,6 @@ def poker_strategy_example(opponent_hand,
 
     return opponent_action, opponent_action_value
 
-
 """
 Generate the cards for two agents and each agent has 5 cards in its hand.
 There are total 52 cards in the games, and one card CANNOT be in both hands.
