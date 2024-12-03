@@ -40,6 +40,9 @@ PHASE = {'INIT_DEALING', 'BIDDING', 'SHOWDOWN'}
 AGENT_ACTIONS = {'CALL', 'BET5', 'BET10', 'BET25', 'FOLD'}
 BETTING_ACTIONS = {'BET5', 'BET10', 'BET25'}
 
+MAX_HANDS = 4
+INIT_AGENT_STACK = 100
+
 def poker_strategy_example(opponent_hand,
                            opponent_hand_rank,
                            opponent_stack,
